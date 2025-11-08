@@ -1,0 +1,5 @@
+{
+  "name": "EV Companion",
+  "description": "An advanced event logger and record keeper for Electric Vehicle owners. Log charging sessions, trips, services, and more. Get AI-driven analytics and recommendations to optimize your EV's health and performance.",
+  "requestFramePermissions": []
+}
