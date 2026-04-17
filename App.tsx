@@ -9,6 +9,7 @@ import LoginPage from './components/LoginPage';
 const AppContent: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
     const [currentView, setCurrentView] = useState('dashboard');
     const [selectedEVId, setSelectedEVId] = useState<string | null>(null);
+    const [openAddEVForm, setOpenAddEVForm] = useState(false);
     const { state } = useAppContext();
 
     useEffect(() => {
@@ -22,26 +23,33 @@ const AppContent: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
         }
     }, [state.evs, currentView, selectedEVId]);
 
+    const handleSetCurrentView = (view: string, options?: { openAddForm?: boolean }) => {
+        if (options?.openAddForm) {
+            setOpenAddEVForm(true);
+        }
+        setCurrentView(view);
+    };
+
     const renderView = () => {
         switch (currentView) {
             case 'dashboard':
-                return <Dashboard setCurrentView={setCurrentView}/>;
+                return <Dashboard setCurrentView={handleSetCurrentView}/>;
             case 'evs':
-                return <EVManagement setCurrentView={setCurrentView} setSelectedEVId={setSelectedEVId} />;
+                return <EVManagement setCurrentView={handleSetCurrentView} setSelectedEVId={setSelectedEVId} openAddForm={openAddEVForm} onOpenAddFormChange={setOpenAddEVForm} />;
             case 'logbook':
                  // If an EV is selected, show its logbook. Otherwise (from sidebar), show primary.
                 const evToShow = state.evs.find(ev => ev.id === selectedEVId) || state.evs[0];
 
                 if (evToShow) {
                     // Show back button only when navigating from the EV list (i.e., selectedEVId is set)
-                    return <Logbook ev={evToShow} showBackButton={!!selectedEVId} setCurrentView={setCurrentView} setSelectedEVId={setSelectedEVId} />;
+                    return <Logbook ev={evToShow} showBackButton={!!selectedEVId} setCurrentView={handleSetCurrentView} setSelectedEVId={setSelectedEVId} />;
                 }
                 // Fallback if no EVs exist (though useEffect should prevent this)
-                return <Dashboard setCurrentView={setCurrentView}/>;
+                return <Dashboard setCurrentView={handleSetCurrentView}/>;
             case 'analytics':
                 return <Analytics />;
             default:
-                return <Dashboard setCurrentView={setCurrentView}/>;
+                return <Dashboard setCurrentView={handleSetCurrentView}/>;
         }
     };
 

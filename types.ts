@@ -11,11 +11,135 @@ export interface EV {
   purchaseDate: string;
   initialOdometer: number;
   initialNotes?: string;
+  city?: string;
+  country?: string;
+  onRoadCost?: number;
+  loanAmount?: number;
   images?: string[]; // Array of base64 data URLs
   videos?: { id: string; url: string }[]; // YouTube URLs
   reviews?: { id: string; title: string; url: string }[];
   socials?: { id: string; platform: string; url: string }[];
 }
+
+// Country-based unit configuration
+export interface CountryUnits {
+  distanceUnit: 'miles' | 'km';
+  distanceSymbol: 'mi' | 'km';
+  currencySymbol: string;
+  currencyCode: string;
+  weightUnit: 'lbs' | 'kg';
+  weightSymbol: 'lbs' | 'kg';
+  sizeUnit: 'in' | 'cm';
+  sizeSymbol: 'in' | 'cm';
+}
+
+export const COUNTRY_UNITS: Record<string, CountryUnits> = {
+  'US': {
+    distanceUnit: 'miles',
+    distanceSymbol: 'mi',
+    currencySymbol: '$',
+    currencyCode: 'USD',
+    weightUnit: 'lbs',
+    weightSymbol: 'lbs',
+    sizeUnit: 'in',
+    sizeSymbol: 'in',
+  },
+  'IN': {
+    distanceUnit: 'km',
+    distanceSymbol: 'km',
+    currencySymbol: '₹',
+    currencyCode: 'INR',
+    weightUnit: 'kg',
+    weightSymbol: 'kg',
+    sizeUnit: 'cm',
+    sizeSymbol: 'cm',
+  },
+  'GB': {
+    distanceUnit: 'miles',
+    distanceSymbol: 'mi',
+    currencySymbol: '£',
+    currencyCode: 'GBP',
+    weightUnit: 'kg',
+    weightSymbol: 'kg',
+    sizeUnit: 'cm',
+    sizeSymbol: 'cm',
+  },
+  'CA': {
+    distanceUnit: 'km',
+    distanceSymbol: 'km',
+    currencySymbol: 'C$',
+    currencyCode: 'CAD',
+    weightUnit: 'kg',
+    weightSymbol: 'kg',
+    sizeUnit: 'cm',
+    sizeSymbol: 'cm',
+  },
+  'AU': {
+    distanceUnit: 'km',
+    distanceSymbol: 'km',
+    currencySymbol: 'A$',
+    currencyCode: 'AUD',
+    weightUnit: 'kg',
+    weightSymbol: 'kg',
+    sizeUnit: 'cm',
+    sizeSymbol: 'cm',
+  },
+  'DE': {
+    distanceUnit: 'km',
+    distanceSymbol: 'km',
+    currencySymbol: '€',
+    currencyCode: 'EUR',
+    weightUnit: 'kg',
+    weightSymbol: 'kg',
+    sizeUnit: 'cm',
+    sizeSymbol: 'cm',
+  },
+  'FR': {
+    distanceUnit: 'km',
+    distanceSymbol: 'km',
+    currencySymbol: '€',
+    currencyCode: 'EUR',
+    weightUnit: 'kg',
+    weightSymbol: 'kg',
+    sizeUnit: 'cm',
+    sizeSymbol: 'cm',
+  },
+  'JP': {
+    distanceUnit: 'km',
+    distanceSymbol: 'km',
+    currencySymbol: '¥',
+    currencyCode: 'JPY',
+    weightUnit: 'kg',
+    weightSymbol: 'kg',
+    sizeUnit: 'cm',
+    sizeSymbol: 'cm',
+  },
+  'CN': {
+    distanceUnit: 'km',
+    distanceSymbol: 'km',
+    currencySymbol: '¥',
+    currencyCode: 'CNY',
+    weightUnit: 'kg',
+    weightSymbol: 'kg',
+    sizeUnit: 'cm',
+    sizeSymbol: 'cm',
+  },
+};
+
+export const DEFAULT_UNITS: CountryUnits = {
+  distanceUnit: 'miles',
+  distanceSymbol: 'mi',
+  currencySymbol: '$',
+  currencyCode: 'USD',
+  weightUnit: 'lbs',
+  weightSymbol: 'lbs',
+  sizeUnit: 'in',
+  sizeSymbol: 'in',
+};
+
+export const getUnitsForCountry = (countryCode?: string): CountryUnits => {
+  return countryCode && COUNTRY_UNITS[countryCode] ? COUNTRY_UNITS[countryCode] : DEFAULT_UNITS;
+};
 
 export enum LogType {
   Charging = 'Charging',
@@ -24,6 +148,7 @@ export enum LogType {
   PurchaseAccessories = 'Purchase Accessories',
   Fault = 'Fault',
   Satisfaction = 'Satisfaction',
+  LoanEMI = 'Loan / EMI',
 }
 
 export enum ChargerType {
@@ -118,7 +243,17 @@ export interface PurchaseAccessoriesLog {
   notes?: string;
 }
 
-export type Log = ChargingLog | TripLog | ServiceLog | FaultLog | SatisfactionLog | PurchaseAccessoriesLog;
+export interface LoanEMILog {
+  id: string;
+  evId: string;
+  type: LogType.LoanEMI;
+  paymentDate: string;
+  emiAmount: number;
+  emiNumber?: number;
+  notes?: string;
+}
+
+export type Log = ChargingLog | TripLog | ServiceLog | FaultLog | SatisfactionLog | PurchaseAccessoriesLog | LoanEMILog;
 
 export interface AppState {
   evs: EV[];

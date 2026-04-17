@@ -10,7 +10,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "start": "node server.js"
+    "start": "node server.js",
+    "azure:package": "zip -r deploy.zip -x node_modules -x .git -x .github -x '*.log' -x .env.local -x .DS_Store -x .idea -x .vscode/* ."
   },
   "dependencies": {
     "@google/genai": "^1.28.0",

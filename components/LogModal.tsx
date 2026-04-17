@@ -1,7 +1,6 @@
-
 import React, { useState } from 'react';
 import { useAppContext } from '../context/AppContext';
-import { Log, LogType, ChargerType, FaultType } from '../types';
+import { Log, LogType, ChargerType, FaultType, getUnitsForCountry } from '../types';
 import { CloseIcon } from './icons';
 
 interface LogModalProps {
@@ -11,7 +10,10 @@ interface LogModalProps {
 }
 
 const LogModal: React.FC<LogModalProps> = ({ evId, onClose, logType }) => {
-  const { dispatch } = useAppContext();
+  const { state, dispatch } = useAppContext();
+  const ev = state.evs.find(e => e.id === evId);
+  const units = getUnitsForCountry(ev?.country);
+
   const [formData, setFormData] = useState<any>({
     type: logType,
     evId: evId,
@@ -67,7 +69,7 @@ const LogModal: React.FC<LogModalProps> = ({ evId, onClose, logType }) => {
             </div>
             <div><label className="text-sm">Charger Type</label><select name="chargerType" onChange={handleChange} defaultValue={ChargerType.L2} required className="bg-gray-700 p-2 rounded w-full mt-1"><option>{ChargerType.L1}</option><option>{ChargerType.L2}</option><option>{ChargerType.DCFC}</option></select></div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                 <div><label className="text-sm">Cost ($)</label><input name="cost" type="number" step="0.01" onChange={handleChange} placeholder="Optional" className="bg-gray-700 p-2 rounded w-full mt-1" /></div>
+                 <div><label className="text-sm">Cost ({units.currencySymbol})</label><input name="cost" type="number" step="0.01" onChange={handleChange} placeholder="Optional" className="bg-gray-700 p-2 rounded w-full mt-1" /></div>
                  <div><label className="text-sm">Location</label><input name="location" type="text" onChange={handleChange} placeholder="Optional" className="bg-gray-700 p-2 rounded w-full mt-1" /></div>
             </div>
           </>
@@ -80,8 +82,8 @@ const LogModal: React.FC<LogModalProps> = ({ evId, onClose, logType }) => {
                     <div><label>End Time</label><input name="endTime" type="datetime-local" defaultValue={nowISO} onChange={handleChange} required className="bg-gray-700 p-2 rounded w-full mt-1" /></div>
                 </div>
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div><label>Start Odometer</label><input name="startOdometer" type="number" onChange={handleChange} required className="bg-gray-700 p-2 rounded w-full mt-1" /></div>
-                    <div><label>End Odometer</label><input name="endOdometer" type="number" onChange={handleChange} required className="bg-gray-700 p-2 rounded w-full mt-1" /></div>
+                    <div><label>Start Odometer ({units.distanceSymbol})</label><input name="startOdometer" type="number" onChange={handleChange} required className="bg-gray-700 p-2 rounded w-full mt-1" /></div>
+                    <div><label>End Odometer ({units.distanceSymbol})</label><input name="endOdometer" type="number" onChange={handleChange} required className="bg-gray-700 p-2 rounded w-full mt-1" /></div>
                 </div>
                 <div><label>Purpose</label><input name="purpose" type="text" onChange={handleChange} placeholder="e.g., Commute, Road Trip (Optional)" className="bg-gray-700 p-2 rounded w-full mt-1" /></div>
              </>
@@ -90,10 +92,10 @@ const LogModal: React.FC<LogModalProps> = ({ evId, onClose, logType }) => {
           return (
               <>
                   <div><label>Service Date</label><input name="serviceDate" type="date" defaultValue={new Date().toISOString().split('T')[0]} onChange={handleChange} required className="bg-gray-700 p-2 rounded w-full mt-1" /></div>
-                  <div><label>Odometer</label><input name="odometer" type="number" onChange={handleChange} required className="bg-gray-700 p-2 rounded w-full mt-1" /></div>
+                  <div><label>Odometer ({units.distanceSymbol})</label><input name="odometer" type="number" onChange={handleChange} required className="bg-gray-700 p-2 rounded w-full mt-1" /></div>
                   <div><label>Description</label><textarea name="description" onChange={handleChange} required className="bg-gray-700 p-2 rounded w-full mt-1" /></div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div><label>Cost ($)</label><input name="cost" type="number" step="0.01" onChange={handleChange} placeholder="Optional" className="bg-gray-700 p-2 rounded w-full mt-1" /></div>
+                      <div><label>Cost ({units.currencySymbol})</label><input name="cost" type="number" step="0.01" onChange={handleChange} placeholder="Optional" className="bg-gray-700 p-2 rounded w-full mt-1" /></div>
                       <div><label>Performed By</label><input name="performedBy" type="text" onChange={handleChange} placeholder="e.g., Dealer, Self (Optional)" className="bg-gray-700 p-2 rounded w-full mt-1" /></div>
                   </div>
               </>
@@ -108,11 +110,11 @@ const LogModal: React.FC<LogModalProps> = ({ evId, onClose, logType }) => {
                     <div><label className="text-sm">Accessory / Item Type</label><input name="accessoryType" type="text" onChange={handleChange} placeholder="e.g., Cargo, Electronics (Optional)" className="bg-gray-700 p-2 rounded w-full mt-1" /></div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div><label className="text-sm">Cost ($)</label><input name="cost" type="number" step="0.01" onChange={handleChange} placeholder="Optional" className="bg-gray-700 p-2 rounded w-full mt-1" /></div>
-                    <div><label className="text-sm">Weight (lbs)</label><input name="weight" type="number" step="0.1" onChange={handleChange} placeholder="Optional" className="bg-gray-700 p-2 rounded w-full mt-1" /></div>
+                    <div><label className="text-sm">Cost ({units.currencySymbol})</label><input name="cost" type="number" step="0.01" onChange={handleChange} placeholder="Optional" className="bg-gray-700 p-2 rounded w-full mt-1" /></div>
+                    <div><label className="text-sm">Weight ({units.weightSymbol})</label><input name="weight" type="number" step="0.1" onChange={handleChange} placeholder="Optional" className="bg-gray-700 p-2 rounded w-full mt-1" /></div>
                 </div>
                 <div>
-                    <label className="text-sm">Size (inches)</label>
+                    <label className="text-sm">Size ({units.sizeSymbol})</label>
                     <div className="grid grid-cols-3 gap-2 mt-1">
                         <input name="sizeL" type="number" step="0.1" onChange={handleChange} placeholder="Length" className="bg-gray-700 p-2 rounded w-full" />
                         <input name="sizeW" type="number" step="0.1" onChange={handleChange} placeholder="Width" className="bg-gray-700 p-2 rounded w-full" />
@@ -139,7 +141,7 @@ const LogModal: React.FC<LogModalProps> = ({ evId, onClose, logType }) => {
           return (
               <>
                   <div><label>Fault Date</label><input name="faultDate" type="date" defaultValue={new Date().toISOString().split('T')[0]} onChange={handleChange} required className="bg-gray-700 p-2 rounded w-full mt-1" /></div>
-                  <div><label>Odometer</label><input name="odometer" type="number" onChange={handleChange} required className="bg-gray-700 p-2 rounded w-full mt-1" /></div>
+                  <div><label>Odometer ({units.distanceSymbol})</label><input name="odometer" type="number" onChange={handleChange} required className="bg-gray-700 p-2 rounded w-full mt-1" /></div>
                   <div><label>Fault Type</label><select name="faultType" onChange={handleChange} defaultValue={FaultType.Other} required className="bg-gray-700 p-2 rounded w-full mt-1"><option>{FaultType.Breakdown}</option><option>{FaultType.Accident}</option><option>{FaultType.WarningLight}</option><option>{FaultType.Other}</option></select></div>
                   <div><label>Description</label><textarea name="description" onChange={handleChange} required className="bg-gray-700 p-2 rounded w-full mt-1" /></div>
                   <div><label>Resolution</label><textarea name="resolution" onChange={handleChange} placeholder="How was it fixed? (Optional)" className="bg-gray-700 p-2 rounded w-full mt-1" /></div>
@@ -151,6 +153,14 @@ const LogModal: React.FC<LogModalProps> = ({ evId, onClose, logType }) => {
                   <div><label>Date</label><input name="logDate" type="date" defaultValue={new Date().toISOString().split('T')[0]} onChange={handleChange} required className="bg-gray-700 p-2 rounded w-full mt-1" /></div>
                   <div><label className="block text-sm mb-2">Overall Satisfaction: {formData.rating || 3}/5</label><input name="rating" type="range" min="1" max="5" defaultValue="3" onChange={handleChange} required className="w-full" /></div>
                   <div><label>Comments</label><textarea name="comments" onChange={handleChange} placeholder="Any thoughts? (Optional)" className="bg-gray-700 p-2 rounded w-full mt-1" /></div>
+              </>
+          );
+      case LogType.LoanEMI:
+          return (
+              <>
+                  <div><label>Payment Date</label><input name="paymentDate" type="date" defaultValue={new Date().toISOString().split('T')[0]} onChange={handleChange} required className="bg-gray-700 p-2 rounded w-full mt-1" /></div>
+                  <div><label>EMI Amount ({units.currencySymbol})</label><input name="emiAmount" type="number" step="0.01" onChange={handleChange} required className="bg-gray-700 p-2 rounded w-full mt-1" /></div>
+                  <div><label>EMI Number (Optional)</label><input name="emiNumber" type="number" onChange={handleChange} placeholder="e.g., 1, 2, 3..." className="bg-gray-700 p-2 rounded w-full mt-1" /></div>
               </>
           );
       default:

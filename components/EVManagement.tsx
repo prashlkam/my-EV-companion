@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAppContext } from '../context/AppContext';
-import { EV, Log, LogType } from '../types';
+import { EV, Log, LogType, getUnitsForCountry, COUNTRY_UNITS } from '../types';
 import { PlusIcon, TrashIcon, PencilIcon, BoltIcon, CloseIcon, DownloadIcon } from './icons';
 import { EVDetail } from './Dashboard';
 import { exportDataToExcel } from '../services/exportService';
@@ -24,6 +24,10 @@ const EVForm: React.FC<EVFormProps> = ({ ev, onClose }) => {
         purchaseDate: ev?.purchaseDate || new Date().toISOString().split('T')[0],
         initialOdometer: ev?.initialOdometer || 0,
         initialNotes: ev?.initialNotes || '',
+        city: ev?.city || '',
+        country: ev?.country || 'US',
+        onRoadCost: ev?.onRoadCost || 0,
+        loanAmount: ev?.loanAmount || 0,
     });
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -81,6 +85,21 @@ const EVForm: React.FC<EVFormProps> = ({ ev, onClose }) => {
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
+                            <label className="text-sm text-gray-400">City</label>
+                            <input name="city" value={formData.city} onChange={handleChange} placeholder="City (e.g., New York)" className="bg-gray-700 p-2 rounded w-full mt-1" />
+                        </div>
+                        <div>
+                            <label className="text-sm text-gray-400">Country</label>
+                            <select name="country" value={formData.country} onChange={handleChange} className="bg-gray-700 p-2 rounded w-full mt-1 text-white">
+                                {Object.entries(COUNTRY_UNITS).map(([code, units]) => (
+                                    <option key={code} value={code}>{units.currencyCode} ({code}) - {units.distanceSymbol}, {units.currencySymbol}</option>
+                                ))}
+                                <option value="">Other (Default Units)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
                             <label className="text-sm text-gray-400">Battery Capacity (kWh)</label>
                             <input name="batteryCapacityKwh" type="number" step="0.1" value={formData.batteryCapacityKwh} onChange={handleChange} placeholder="Battery capacity (kWh)" required className="bg-gray-700 p-2 rounded w-full mt-1" />
                         </div>
@@ -97,6 +116,16 @@ const EVForm: React.FC<EVFormProps> = ({ ev, onClose }) => {
                         <label className="text-sm text-gray-400">First Notes</label>
                         <textarea name="initialNotes" value={formData.initialNotes} onChange={handleChange} placeholder="Any initial thoughts or observations?" rows={3} className="bg-gray-700 p-2 rounded w-full mt-1"></textarea>
                     </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label className="text-sm text-gray-400">On-Road Cost</label>
+                            <input name="onRoadCost" type="number" step="0.01" value={formData.onRoadCost} onChange={handleChange} placeholder="Total on-road cost" className="bg-gray-700 p-2 rounded w-full mt-1" />
+                        </div>
+                        <div>
+                            <label className="text-sm text-gray-400">Loan Amount</label>
+                            <input name="loanAmount" type="number" step="0.01" value={formData.loanAmount} onChange={handleChange} placeholder="Loan amount if financed" className="bg-gray-700 p-2 rounded w-full mt-1" />
+                        </div>
+                    </div>
                     <div className="flex justify-end pt-4">
                         <button type="button" onClick={onClose} className="bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded mr-2">Cancel</button>
                         <button type="submit" className="bg-brand-primary hover:bg-brand-secondary text-white font-bold py-2 px-4 rounded">{ev ? 'Save Changes' : 'Add EV'}</button>
@@ -109,14 +138,25 @@ const EVForm: React.FC<EVFormProps> = ({ ev, onClose }) => {
 
 
 interface EVManagementProps {
-    setCurrentView: (view: string) => void;
+    setCurrentView: (view: string, options?: { openAddForm?: boolean }) => void;
     setSelectedEVId: (id: string) => void;
+    openAddForm?: boolean;
+    onOpenAddFormChange?: (open: boolean) => void;
 }
 
-const EVManagement: React.FC<EVManagementProps> = ({ setCurrentView, setSelectedEVId }) => {
+const EVManagement: React.FC<EVManagementProps> = ({ setCurrentView, setSelectedEVId, openAddForm, onOpenAddFormChange }) => {
     const { state, dispatch } = useAppContext();
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [editingEV, setEditingEV] = useState<EV | null>(null);
+
+    // Open form when openAddForm prop is true
+    React.useEffect(() => {
+        if (openAddForm) {
+            setEditingEV(null);
+            setIsFormOpen(true);
+            onOpenAddFormChange?.(false);
+        }
+    }, [openAddForm, onOpenAddFormChange]);
 
     const handleEdit = (ev: EV) => {
         setEditingEV(ev);
@@ -128,21 +168,38 @@ const EVManagement: React.FC<EVManagementProps> = ({ setCurrentView, setSelected
             dispatch({ type: 'DELETE_EV', payload: id });
         }
     };
-    
+
     const getLatestOdometer = (evId: string) => {
         const relevantLogs = state.logs
             .filter(log => log.evId === evId && ('odometer' in log || 'endOdometer' in log));
 
         if (relevantLogs.length === 0) return null;
-            
+
         const maxOdo = Math.max(...relevantLogs.map(log => {
             if (log.type === LogType.Trip) return log.endOdometer;
             if (log.type === LogType.Service || log.type === LogType.Fault) return log.odometer;
             return 0;
         }));
-        
+
         return maxOdo;
-    }
+    };
+
+    const getOutstandingLoan = (evId: string) => {
+        const ev = state.evs.find(e => e.id === evId);
+        if (!ev || !ev.loanAmount) return 0;
+
+        const emiLogs = state.logs.filter(
+            log => log.evId === evId && log.type === LogType.LoanEMI
+        ) as import('../types').LoanEMILog[];
+
+        const totalPaid = emiLogs.reduce((sum, log) => sum + log.emiAmount, 0);
+        return Math.max(0, ev.loanAmount - totalPaid);
+    };
+
+    const formatCurrency = (amount: number, countryCode?: string) => {
+        const units = getUnitsForCountry(countryCode);
+        return `${units.currencySymbol}${amount.toFixed(2)}`;
+    };
 
     const handleDownload = () => {
         try {
@@ -192,7 +249,10 @@ const EVManagement: React.FC<EVManagementProps> = ({ setCurrentView, setSelected
                              <div className="text-sm text-gray-400 grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-1 mb-6">
                                 <p><strong>Battery:</strong> {ev.batteryCapacityKwh} kWh</p>
                                 <p><strong>Purchased:</strong> {ev.purchaseDate}</p>
-                                <p><strong>Odometer:</strong> {getLatestOdometer(ev.id)?.toLocaleString() ?? ev.initialOdometer.toLocaleString()} miles</p>
+                                <p><strong>Odometer:</strong> {getLatestOdometer(ev.id)?.toLocaleString() ?? ev.initialOdometer.toLocaleString()} {getUnitsForCountry(ev.country).distanceSymbol}</p>
+                                {ev.onRoadCost ? <p><strong>On-Road Cost:</strong> {formatCurrency(ev.onRoadCost, ev.country)}</p> : null}
+                                {ev.loanAmount ? <p><strong>Loan Amount:</strong> {formatCurrency(ev.loanAmount, ev.country)}</p> : null}
+                                {ev.loanAmount ? <p><strong>Outstanding Loan:</strong> {formatCurrency(getOutstandingLoan(ev.id), ev.country)}</p> : null}
                             </div>
                             {ev.initialNotes && (
                                 <blockquote className="border-l-4 border-gray-600 pl-4 my-4 italic text-gray-400">

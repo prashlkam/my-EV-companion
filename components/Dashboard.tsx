@@ -1,7 +1,7 @@
 
 import React, { useState, useRef } from 'react';
 import { useAppContext } from '../context/AppContext';
-import { EV, Log, LogType, ChargingLog, TripLog, ServiceLog, FaultLog, SatisfactionLog, PurchaseAccessoriesLog } from '../types';
+import { EV, Log, LogType, ChargingLog, TripLog, ServiceLog, FaultLog, SatisfactionLog, PurchaseAccessoriesLog, LoanEMILog, getUnitsForCountry } from '../types';
 import LogModal from './LogModal';
 import { BoltIcon, PlusIcon, TrashIcon, CloseIcon, ImageIcon, VideoIcon, LinkIcon, GlobeIcon, LogbookIcon } from './icons';
 
@@ -11,10 +11,13 @@ const getLogDateString = (log: Log): string => {
     if ('faultDate' in log) return log.faultDate;
     if ('purchaseDate' in log) return log.purchaseDate;
     if ('logDate' in log) return log.logDate;
+    if ('paymentDate' in log) return log.paymentDate;
     return '';
 }
 
-const LogItem: React.FC<{log: Log, onDelete: (id: string) => void}> = ({ log, onDelete }) => {
+const LogItem: React.FC<{log: Log, evCountry: string | undefined, onDelete: (id: string) => void}> = ({ log, evCountry, onDelete }) => {
+    const units = getUnitsForCountry(evCountry);
+
     const renderLogDetails = () => {
         switch (log.type) {
             case LogType.Charging:
@@ -22,19 +25,22 @@ const LogItem: React.FC<{log: Log, onDelete: (id: string) => void}> = ({ log, on
                 return <p>Charged from {chargeLog.startSocPercent}% to {chargeLog.endSocPercent}% ({chargeLog.chargerType}).</p>;
             case LogType.Trip:
                 const tripLog = log as TripLog;
-                return <p>Trip of {tripLog.endOdometer - tripLog.startOdometer} miles. Odometer: {tripLog.endOdometer.toLocaleString()}</p>;
+                return <p>Trip of {tripLog.endOdometer - tripLog.startOdometer} {units.distanceSymbol}. Odometer: {tripLog.endOdometer.toLocaleString()}</p>;
             case LogType.Service:
                 const serviceLog = log as ServiceLog;
-                return <p>Service: {serviceLog.description} at {serviceLog.odometer.toLocaleString()} miles.</p>;
+                return <p>Service: {serviceLog.description} at {serviceLog.odometer.toLocaleString()} {units.distanceSymbol}.</p>;
             case LogType.PurchaseAccessories:
                 const accLog = log as PurchaseAccessoriesLog;
-                return <p>Purchased: {accLog.accessoryName}{accLog.cost ? ` for $${accLog.cost.toFixed(2)}` : ''}.</p>;
+                return <p>Purchased: {accLog.accessoryName}{accLog.cost ? ` for ${units.currencySymbol}${accLog.cost.toFixed(2)}` : ''}.</p>;
             case LogType.Fault:
                 const faultLog = log as FaultLog;
                 return <p>Fault: {faultLog.faultType} - {faultLog.description}.</p>;
             case LogType.Satisfaction:
                 const satLog = log as SatisfactionLog;
                 return <p>Satisfaction Rating: {satLog.rating}/5.</p>;
+            case LogType.LoanEMI:
+                const emiLog = log as LoanEMILog;
+                return <p>EMI Payment: {units.currencySymbol}{emiLog.emiAmount.toFixed(2)}{emiLog.emiNumber ? ` (EMI #${emiLog.emiNumber})` : ''}.</p>;
             default:
                 return null;
         }
@@ -58,13 +64,14 @@ const LogItem: React.FC<{log: Log, onDelete: (id: string) => void}> = ({ log, on
 interface LogbookProps {
     ev: EV;
     showBackButton?: boolean;
-    setCurrentView?: (view: string) => void;
+    setCurrentView?: (view: string, options?: { openAddForm?: boolean }) => void;
     setSelectedEVId?: (id: string | null) => void;
 }
 
 const Logbook: React.FC<LogbookProps> = ({ ev, showBackButton, setCurrentView, setSelectedEVId }) => {
     const { state, dispatch } = useAppContext();
     const [logModal, setLogModal] = useState<{ isOpen: boolean, type: LogType | null }>({ isOpen: false, type: null });
+    const evUnits = getUnitsForCountry(ev.country);
 
     const evLogs = state.logs.filter(log => log.evId === ev.id).sort((a, b) => {
         const dateA = new Date(getLogDateString(a)).getTime();
@@ -75,7 +82,7 @@ const Logbook: React.FC<LogbookProps> = ({ ev, showBackButton, setCurrentView, s
     const openLogModal = (type: LogType) => {
         setLogModal({ isOpen: true, type: type });
     };
-    
+
     const handleDeleteLog = (logId: string) => {
         if(window.confirm('Are you sure you want to delete this log?')){
             dispatch({type: 'DELETE_LOG', payload: logId});
@@ -105,7 +112,18 @@ const Logbook: React.FC<LogbookProps> = ({ ev, showBackButton, setCurrentView, s
             <div className="mb-6">
                 <h2 className="text-xl font-semibold mb-3">Add New Log</h2>
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-                    {Object.values(LogType).map(type => (
+                    {/* First button: Charging */}
+                    <button onClick={() => openLogModal(LogType.Charging)} className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 px-4 rounded flex items-center justify-center text-sm">
+                        <PlusIcon className="h-5 w-5 mr-2" />
+                        Charging
+                    </button>
+                    {/* Second button: Loan / EMI */}
+                    <button onClick={() => openLogModal(LogType.LoanEMI)} className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 px-4 rounded flex items-center justify-center text-sm">
+                        <PlusIcon className="h-5 w-5 mr-2" />
+                        Loan / EMI
+                    </button>
+                    {/* Remaining buttons */}
+                    {[LogType.Trip, LogType.Service, LogType.PurchaseAccessories, LogType.Fault, LogType.Satisfaction].map(type => (
                         <button key={type} onClick={() => openLogModal(type)} className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 px-4 rounded flex items-center justify-center text-sm">
                             <PlusIcon className="h-5 w-5 mr-2" />
                             {type}
@@ -119,7 +137,7 @@ const Logbook: React.FC<LogbookProps> = ({ ev, showBackButton, setCurrentView, s
                 {evLogs.length > 0 ? (
                     <div className="space-y-4">
                         {evLogs.map(log => (
-                            <LogItem key={log.id} log={log} onDelete={handleDeleteLog}/>
+                            <LogItem key={log.id} log={log} evCountry={ev.country} onDelete={handleDeleteLog}/>
                         ))}
                     </div>
                 ) : (
@@ -137,7 +155,7 @@ const Logbook: React.FC<LogbookProps> = ({ ev, showBackButton, setCurrentView, s
 };
 
 
-const Dashboard: React.FC<{ setCurrentView: (view: string) => void }> = ({ setCurrentView }) => {
+const Dashboard: React.FC<{ setCurrentView: (view: string, options?: { openAddForm?: boolean }) => void }> = ({ setCurrentView }) => {
     const { state } = useAppContext();
     const { evs, logs } = state;
 
@@ -147,8 +165,8 @@ const Dashboard: React.FC<{ setCurrentView: (view: string) => void }> = ({ setCu
                 <BoltIcon className="w-24 h-24 text-gray-700" />
                 <h1 className="text-4xl font-bold mt-4">Welcome to EV Companion</h1>
                 <p className="text-lg text-gray-400 mt-2">Start by adding your electric vehicle to begin logging.</p>
-                <button 
-                    onClick={() => setCurrentView('evs')}
+                <button
+                    onClick={() => setCurrentView('evs', { openAddForm: true })}
                     className="mt-8 bg-brand-primary hover:bg-brand-secondary text-white font-bold py-3 px-6 rounded-lg text-lg flex items-center"
                 >
                     <PlusIcon className="h-6 w-6 mr-2" />
@@ -157,11 +175,11 @@ const Dashboard: React.FC<{ setCurrentView: (view: string) => void }> = ({ setCu
             </div>
         );
     }
-    
+
     const totalDistance = logs
         .filter((log): log is TripLog => log.type === LogType.Trip)
         .reduce((acc, log) => acc + (log.endOdometer - log.startOdometer), 0);
-        
+
     const totalCost = logs
         .filter((log): log is ChargingLog | ServiceLog => log.type === LogType.Charging || log.type === LogType.Service)
         .reduce((acc, log) => acc + (log.cost || 0), 0);
@@ -169,16 +187,17 @@ const Dashboard: React.FC<{ setCurrentView: (view: string) => void }> = ({ setCu
     const totalCharges = logs.filter(log => log.type === LogType.Charging).length;
 
     const favoriteEV = evs[0];
+    const units = getUnitsForCountry(favoriteEV.country);
 
     return (
         <div className="p-4 md:p-8">
             <h1 className="text-3xl font-bold text-white mb-6">Dashboard</h1>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-                <div className="bg-gray-800 p-5 rounded-lg"><h3 className="text-gray-400">Total Distance Driven</h3><p className="text-3xl font-bold">{totalDistance.toLocaleString()} mi</p></div>
-                <div className="bg-gray-800 p-5 rounded-lg"><h3 className="text-gray-400">Total Spent</h3><p className="text-3xl font-bold">${totalCost.toFixed(2)}</p></div>
+                <div className="bg-gray-800 p-5 rounded-lg"><h3 className="text-gray-400">Total Distance Driven</h3><p className="text-3xl font-bold">{totalDistance.toLocaleString()} {units.distanceSymbol}</p></div>
+                <div className="bg-gray-800 p-5 rounded-lg"><h3 className="text-gray-400">Total Spent</h3><p className="text-3xl font-bold">{units.currencySymbol}{totalCost.toFixed(2)}</p></div>
                 <div className="bg-gray-800 p-5 rounded-lg"><h3 className="text-gray-400">Charging Sessions</h3><p className="text-3xl font-bold">{totalCharges}</p></div>
             </div>
-            
+
             <div className="bg-gray-800 rounded-lg p-6">
                 <h2 className="text-xl font-semibold mb-4">Primary Vehicle Logbook</h2>
                 <Logbook ev={favoriteEV} />

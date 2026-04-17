@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { useAppContext } from '../context/AppContext';
-import { LogType, ChargingLog, TripLog, ChargerType, AIRecommendation } from '../types';
+import { LogType, ChargingLog, TripLog, ChargerType, AIRecommendation, getUnitsForCountry } from '../types';
 import getAIRecommendations from '../services/geminiService';
 // Fix: Import `AnalyticsIcon` to resolve reference error.
 import { BoltIcon, AnalyticsIcon } from './icons';
@@ -10,18 +10,21 @@ const COLORS = ['#00BFFF', '#1E90FF', '#8884d8', '#82ca9d'];
 
 const Analytics: React.FC = () => {
     const { state } = useAppContext();
-    const { logs } = state;
+    const { logs, evs } = state;
     const [loading, setLoading] = useState(false);
     const [recommendations, setRecommendations] = useState<AIRecommendation[]>([]);
+
+    // Use the first EV's country for unit display in analytics
+    const units = getUnitsForCountry(evs[0]?.country);
 
     const chargingData = useMemo(() => {
         const chargingLogs = logs.filter((log): log is ChargingLog => log.type === LogType.Charging);
         return chargingLogs.map(log => ({
             name: new Date(log.startTime).toLocaleDateString(),
             'Energy Added (kWh)': ((log.endSocPercent - log.startSocPercent) / 100) * (state.evs.find(ev => ev.id === log.evId)?.batteryCapacityKwh || 0),
-            'Cost ($)': log.cost || 0,
+            [`Cost (${units.currencySymbol})`]: log.cost || 0,
         }));
-    }, [logs, state.evs]);
+    }, [logs, state.evs, units.currencySymbol]);
 
     const tripData = useMemo(() => {
         const tripLogs = logs.filter((log): log is TripLog => log.type === LogType.Trip);
@@ -29,10 +32,10 @@ const Analytics: React.FC = () => {
              const distance = log.endOdometer - log.startOdometer;
              return {
                 name: new Date(log.startTime).toLocaleDateString(),
-                'Distance (mi)': distance,
+                [`Distance (${units.distanceSymbol})`]: distance,
              };
         });
-    }, [logs]);
+    }, [logs, units.distanceSymbol]);
 
     const chargerTypeData = useMemo(() => {
         const chargingLogs = logs.filter((log): log is ChargingLog => log.type === LogType.Charging);
@@ -73,7 +76,7 @@ const Analytics: React.FC = () => {
                                 <Tooltip contentStyle={{ backgroundColor: '#1E1E1E', border: '1px solid #363636' }} />
                                 <Legend />
                                 <Bar yAxisId="left" dataKey="Energy Added (kWh)" fill="#00BFFF" />
-                                <Bar yAxisId="right" dataKey="Cost ($)" fill="#1E90FF" />
+                                <Bar yAxisId="right" dataKey={`Cost (${units.currencySymbol})`} fill="#1E90FF" />
                             </BarChart>
                         </ResponsiveContainer>
                     </div>
@@ -100,7 +103,7 @@ const Analytics: React.FC = () => {
                                 <YAxis stroke="#808080" />
                                 <Tooltip contentStyle={{ backgroundColor: '#1E1E1E', border: '1px solid #363636' }} />
                                 <Legend />
-                                <Bar dataKey="Distance (mi)" fill="#82ca9d" />
+                                <Bar dataKey={`Distance (${units.distanceSymbol})`} fill="#82ca9d" />
                             </BarChart>
                         </ResponsiveContainer>
                     </div>
