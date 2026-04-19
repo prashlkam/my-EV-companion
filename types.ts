@@ -250,6 +250,7 @@ export interface LoanEMILog {
   paymentDate: string;
   emiAmount: number;
   emiNumber?: number;
+  eventType: 'loan' | 'emi' | 'close-loan' | 'pre-close-loan' | 'transfer-loan';
   notes?: string;
 }
 

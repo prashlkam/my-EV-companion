@@ -158,6 +158,7 @@ const LogModal: React.FC<LogModalProps> = ({ evId, onClose, logType }) => {
       case LogType.LoanEMI:
           return (
               <>
+                  <div><label>Event Type</label><select name="eventType" onChange={handleChange} required className="bg-gray-700 p-2 rounded w-full mt-1"><option value="">Select event type</option><option value="loan">Loan</option><option value="emi">EMI</option><option value="close-loan">Close Loan</option><option value="pre-close-loan">Pre-close Loan</option><option value="transfer-loan">Transfer Loan</option></select></div>
                   <div><label>Payment Date</label><input name="paymentDate" type="date" defaultValue={new Date().toISOString().split('T')[0]} onChange={handleChange} required className="bg-gray-700 p-2 rounded w-full mt-1" /></div>
                   <div><label>EMI Amount ({units.currencySymbol})</label><input name="emiAmount" type="number" step="0.01" onChange={handleChange} required className="bg-gray-700 p-2 rounded w-full mt-1" /></div>
                   <div><label>EMI Number (Optional)</label><input name="emiNumber" type="number" onChange={handleChange} placeholder="e.g., 1, 2, 3..." className="bg-gray-700 p-2 rounded w-full mt-1" /></div>
