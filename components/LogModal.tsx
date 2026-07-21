@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useAppContext } from '../context/AppContext';
-import { Log, LogType, ChargerType, FaultType, getUnitsForCountry } from '../types';
+import { Log, LogType, ChargerType, FaultType, LoanEventType, getUnitsForCountry } from '../types';
 import { CloseIcon } from './icons';
+import { getLoanSummary, getLoanStatusLabel } from '../services/loanService';
 
 interface LogModalProps {
   evId: string;
@@ -13,15 +14,37 @@ const LogModal: React.FC<LogModalProps> = ({ evId, onClose, logType }) => {
   const { state, dispatch } = useAppContext();
   const ev = state.evs.find(e => e.id === evId);
   const units = getUnitsForCountry(ev?.country);
+  const loan = getLoanSummary(ev, state.logs);
 
+  // Loan events that reduce/close an existing balance require an active loan.
+  const requiresActiveLoan = (eventType: LoanEventType) =>
+    eventType === 'emi' || eventType === 'close-loan' || eventType === 'pre-close-loan' || eventType === 'transfer-loan';
+
+  const loanAmountLabel = (eventType?: LoanEventType) => {
+    switch (eventType) {
+      case 'loan': return 'Loan Amount';
+      case 'emi': return 'EMI Amount';
+      case 'close-loan': return 'Final Payment Amount';
+      case 'pre-close-loan': return 'Settlement Amount';
+      case 'transfer-loan': return 'Outstanding Transferred';
+      default: return 'Amount';
+    }
+  };
+
+  const today = new Date().toISOString().split('T')[0];
   const [formData, setFormData] = useState<any>({
     type: logType,
     evId: evId,
     id: crypto.randomUUID(),
     ...(logType === LogType.PurchaseAccessories && {
-        purchaseDate: new Date().toISOString().split('T')[0],
+        purchaseDate: today,
         usesPower: false,
         couldVoidWarranty: false
+    }),
+    // Seed the payment date so loan events sort chronologically even if the
+    // user leaves the pre-filled date untouched.
+    ...(logType === LogType.LoanEMI && {
+        paymentDate: today,
     })
   });
 
@@ -44,8 +67,46 @@ const LogModal: React.FC<LogModalProps> = ({ evId, onClose, logType }) => {
     setFormData((prev: any) => ({ ...prev, [name]: val }));
   };
 
+  // When the loan event type changes, prefill a sensible default amount.
+  const handleEventTypeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const eventType = e.target.value as LoanEventType | '';
+    setFormData((prev: any) => {
+      const next = { ...prev, eventType };
+      // Closing, pre-closing or transferring settles the whole outstanding balance.
+      if (eventType === 'close-loan' || eventType === 'pre-close-loan' || eventType === 'transfer-loan') {
+        next.emiAmount = Number(loan.outstanding.toFixed(2));
+      } else if (eventType === 'loan' || eventType === 'emi') {
+        next.emiAmount = prev.emiAmount || 0;
+      }
+      return next;
+    });
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (logType === LogType.LoanEMI) {
+      const eventType = formData.eventType as LoanEventType | undefined;
+      if (!eventType) {
+        alert('Please select a loan event type.');
+        return;
+      }
+      if (eventType === 'loan' && (!formData.emiAmount || formData.emiAmount <= 0)) {
+        alert('Please enter the loan amount.');
+        return;
+      }
+      if (requiresActiveLoan(eventType) && loan.outstanding <= 0) {
+        alert('There is no active loan balance on this vehicle to record this event against. Record a "Loan" event (or set a loan amount on the EV) first.');
+        return;
+      }
+      if (eventType === 'emi' && formData.emiAmount > loan.outstanding) {
+        const proceed = window.confirm(
+          `This EMI (${units.currencySymbol}${Number(formData.emiAmount).toFixed(2)}) is larger than the outstanding balance (${units.currencySymbol}${loan.outstanding.toFixed(2)}). The outstanding will be set to 0. Continue?`
+        );
+        if (!proceed) return;
+      }
+    }
+
     dispatch({ type: 'ADD_LOG', payload: formData as Log });
     onClose();
   };
@@ -155,15 +216,39 @@ const LogModal: React.FC<LogModalProps> = ({ evId, onClose, logType }) => {
                   <div><label>Comments</label><textarea name="comments" onChange={handleChange} placeholder="Any thoughts? (Optional)" className="bg-gray-700 p-2 rounded w-full mt-1" /></div>
               </>
           );
-      case LogType.LoanEMI:
+      case LogType.LoanEMI: {
+          const eventType = formData.eventType as LoanEventType | '';
+          const settlesLoan = eventType === 'close-loan' || eventType === 'pre-close-loan' || eventType === 'transfer-loan';
           return (
               <>
-                  <div><label>Event Type</label><select name="eventType" onChange={handleChange} required className="bg-gray-700 p-2 rounded w-full mt-1"><option value="">Select event type</option><option value="loan">Loan</option><option value="emi">EMI</option><option value="close-loan">Close Loan</option><option value="pre-close-loan">Pre-close Loan</option><option value="transfer-loan">Transfer Loan</option></select></div>
-                  <div><label>Payment Date</label><input name="paymentDate" type="date" defaultValue={new Date().toISOString().split('T')[0]} onChange={handleChange} required className="bg-gray-700 p-2 rounded w-full mt-1" /></div>
-                  <div><label>EMI Amount ({units.currencySymbol})</label><input name="emiAmount" type="number" step="0.01" onChange={handleChange} required className="bg-gray-700 p-2 rounded w-full mt-1" /></div>
-                  <div><label>EMI Number (Optional)</label><input name="emiNumber" type="number" onChange={handleChange} placeholder="e.g., 1, 2, 3..." className="bg-gray-700 p-2 rounded w-full mt-1" /></div>
+                  <div className="bg-gray-900/50 border border-gray-700 rounded p-3 text-sm">
+                      {loan.hasLoan ? (
+                          <div className="flex justify-between">
+                              <span className="text-gray-400">Current Outstanding</span>
+                              <span className={loan.outstanding > 0 ? 'text-yellow-400 font-semibold' : 'text-green-400 font-semibold'}>
+                                  {units.currencySymbol}{loan.outstanding.toFixed(2)} {loan.status !== 'active' && `(${getLoanStatusLabel(loan)})`}
+                              </span>
+                          </div>
+                      ) : (
+                          <span className="text-gray-400">No active loan yet. Choose "Loan" to record one, or set a Loan Amount on the EV.</span>
+                      )}
+                  </div>
+                  <div><label>Event Type</label><select name="eventType" value={eventType} onChange={handleEventTypeChange} required className="bg-gray-700 p-2 rounded w-full mt-1"><option value="">Select event type</option><option value="loan">Loan (take / add a loan)</option><option value="emi">EMI (payment)</option><option value="close-loan">Close Loan</option><option value="pre-close-loan">Pre-close Loan</option><option value="transfer-loan">Transfer Loan</option></select></div>
+                  <div><label>{eventType === 'emi' ? 'Payment Date' : 'Date'}</label><input name="paymentDate" type="date" defaultValue={new Date().toISOString().split('T')[0]} onChange={handleChange} required className="bg-gray-700 p-2 rounded w-full mt-1" /></div>
+                  <div>
+                      <label>{loanAmountLabel(eventType || undefined)} ({units.currencySymbol})</label>
+                      <input name="emiAmount" type="number" step="0.01" value={formData.emiAmount ?? ''} onChange={handleChange} required={!settlesLoan} className="bg-gray-700 p-2 rounded w-full mt-1" />
+                      {settlesLoan && <p className="text-xs text-gray-400 mt-1">This will set the outstanding balance to {units.currencySymbol}0.00.</p>}
+                  </div>
+                  {eventType === 'emi' && (
+                      <div><label>EMI Number (Optional)</label><input name="emiNumber" type="number" onChange={handleChange} placeholder="e.g., 1, 2, 3..." className="bg-gray-700 p-2 rounded w-full mt-1" /></div>
+                  )}
+                  {eventType === 'transfer-loan' && (
+                      <div><label>Transferred To (Optional)</label><input name="transferredTo" type="text" onChange={handleChange} placeholder="New lender or owner" className="bg-gray-700 p-2 rounded w-full mt-1" /></div>
+                  )}
               </>
           );
+      }
       default:
         return null;
     }

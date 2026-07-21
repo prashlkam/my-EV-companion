@@ -4,6 +4,7 @@ import { EV, Log, LogType, getUnitsForCountry, COUNTRY_UNITS } from '../types';
 import { PlusIcon, TrashIcon, PencilIcon, BoltIcon, CloseIcon, DownloadIcon } from './icons';
 import { EVDetail } from './Dashboard';
 import { exportDataToExcel } from '../services/exportService';
+import { getLoanSummary, getLoanStatusLabel } from '../services/loanService';
 
 
 interface EVFormProps {
@@ -184,18 +185,6 @@ const EVManagement: React.FC<EVManagementProps> = ({ setCurrentView, setSelected
         return maxOdo;
     };
 
-    const getOutstandingLoan = (evId: string) => {
-        const ev = state.evs.find(e => e.id === evId);
-        if (!ev || !ev.loanAmount) return 0;
-
-        const emiLogs = state.logs.filter(
-            log => log.evId === evId && log.type === LogType.LoanEMI
-        ) as import('../types').LoanEMILog[];
-
-        const totalPaid = emiLogs.reduce((sum, log) => sum + log.emiAmount, 0);
-        return Math.max(0, ev.loanAmount - totalPaid);
-    };
-
     const formatCurrency = (amount: number, countryCode?: string) => {
         const units = getUnitsForCountry(countryCode);
         return `${units.currencySymbol}${amount.toFixed(2)}`;
@@ -251,8 +240,24 @@ const EVManagement: React.FC<EVManagementProps> = ({ setCurrentView, setSelected
                                 <p><strong>Purchased:</strong> {ev.purchaseDate}</p>
                                 <p><strong>Odometer:</strong> {getLatestOdometer(ev.id)?.toLocaleString() ?? ev.initialOdometer.toLocaleString()} {getUnitsForCountry(ev.country).distanceSymbol}</p>
                                 {ev.onRoadCost ? <p><strong>On-Road Cost:</strong> {formatCurrency(ev.onRoadCost, ev.country)}</p> : null}
-                                {ev.loanAmount ? <p><strong>Loan Amount:</strong> {formatCurrency(ev.loanAmount, ev.country)}</p> : null}
-                                {ev.loanAmount ? <p><strong>Outstanding Loan:</strong> {formatCurrency(getOutstandingLoan(ev.id), ev.country)}</p> : null}
+                                {(() => {
+                                    const loan = getLoanSummary(ev, state.logs);
+                                    if (!loan.hasLoan) return null;
+                                    return (
+                                        <>
+                                            <p><strong>Loan Amount:</strong> {formatCurrency(loan.totalPrincipal, ev.country)}</p>
+                                            <p>
+                                                <strong>Outstanding Loan:</strong>{' '}
+                                                <span className={loan.outstanding > 0 ? 'text-yellow-400 font-semibold' : 'text-green-400 font-semibold'}>
+                                                    {formatCurrency(loan.outstanding, ev.country)}
+                                                </span>
+                                                {loan.status !== 'active' && (
+                                                    <span className="ml-2 text-xs bg-gray-700 text-gray-300 px-2 py-0.5 rounded-full align-middle">{getLoanStatusLabel(loan)}</span>
+                                                )}
+                                            </p>
+                                        </>
+                                    );
+                                })()}
                             </div>
                             {ev.initialNotes && (
                                 <blockquote className="border-l-4 border-gray-600 pl-4 my-4 italic text-gray-400">

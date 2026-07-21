@@ -243,14 +243,19 @@ export interface PurchaseAccessoriesLog {
   notes?: string;
 }
 
+export type LoanEventType = 'loan' | 'emi' | 'close-loan' | 'pre-close-loan' | 'transfer-loan';
+
 export interface LoanEMILog {
   id: string;
   evId: string;
   type: LogType.LoanEMI;
   paymentDate: string;
+  // Generic amount for the event: loan disbursed, EMI paid, or settlement amount.
   emiAmount: number;
   emiNumber?: number;
-  eventType: 'loan' | 'emi' | 'close-loan' | 'pre-close-loan' | 'transfer-loan';
+  eventType: LoanEventType;
+  // For transfer-loan: the new lender / owner the loan was transferred to.
+  transferredTo?: string;
   notes?: string;
 }
 

@@ -4,6 +4,7 @@ import { useAppContext } from '../context/AppContext';
 import { EV, Log, LogType, ChargingLog, TripLog, ServiceLog, FaultLog, SatisfactionLog, PurchaseAccessoriesLog, LoanEMILog, getUnitsForCountry } from '../types';
 import LogModal from './LogModal';
 import { BoltIcon, PlusIcon, TrashIcon, CloseIcon, ImageIcon, VideoIcon, LinkIcon, GlobeIcon, LogbookIcon } from './icons';
+import { getLoanSummary, getLoanStatusLabel, getLoanEventLabel } from '../services/loanService';
 
 const getLogDateString = (log: Log): string => {
     if ('startTime' in log) return log.startTime;
@@ -40,7 +41,11 @@ const LogItem: React.FC<{log: Log, evCountry: string | undefined, onDelete: (id:
                 return <p>Satisfaction Rating: {satLog.rating}/5.</p>;
             case LogType.LoanEMI:
                 const emiLog = log as LoanEMILog;
-                return <p>EMI Payment: {units.currencySymbol}{emiLog.emiAmount.toFixed(2)}{emiLog.emiNumber ? ` (EMI #${emiLog.emiNumber})` : ''}.</p>;
+                const loanLabel = getLoanEventLabel(emiLog.eventType);
+                const amountText = emiLog.emiAmount ? `: ${units.currencySymbol}${emiLog.emiAmount.toFixed(2)}` : '';
+                const emiNumText = emiLog.eventType === 'emi' && emiLog.emiNumber ? ` (EMI #${emiLog.emiNumber})` : '';
+                const transferText = emiLog.eventType === 'transfer-loan' && emiLog.transferredTo ? ` to ${emiLog.transferredTo}` : '';
+                return <p>{loanLabel}{amountText}{emiNumText}{transferText}.</p>;
             default:
                 return null;
         }
@@ -79,6 +84,8 @@ const Logbook: React.FC<LogbookProps> = ({ ev, showBackButton, setCurrentView, s
         return dateB - dateA;
     });
 
+    const loan = getLoanSummary(ev, state.logs);
+
     const openLogModal = (type: LogType) => {
         setLogModal({ isOpen: true, type: type });
     };
@@ -108,6 +115,22 @@ const Logbook: React.FC<LogbookProps> = ({ ev, showBackButton, setCurrentView, s
                     </button>
                 )}
             </div>
+
+            {loan.hasLoan && (
+                <div className="mb-6 bg-gray-800 border border-gray-700 rounded-lg p-4 flex flex-wrap items-center justify-between gap-4">
+                    <div>
+                        <p className="text-sm text-gray-400">Outstanding Loan</p>
+                        <p className={`text-2xl font-bold ${loan.outstanding > 0 ? 'text-yellow-400' : 'text-green-400'}`}>
+                            {evUnits.currencySymbol}{loan.outstanding.toFixed(2)}
+                        </p>
+                    </div>
+                    <div className="text-sm text-gray-400 text-right space-y-1">
+                        <p>Original: <span className="text-gray-200">{evUnits.currencySymbol}{loan.totalPrincipal.toFixed(2)}</span></p>
+                        <p>Paid: <span className="text-gray-200">{evUnits.currencySymbol}{loan.totalPaid.toFixed(2)}</span></p>
+                        <p>Status: <span className="text-gray-200">{getLoanStatusLabel(loan)}</span></p>
+                    </div>
+                </div>
+            )}
 
             <div className="mb-6">
                 <h2 className="text-xl font-semibold mb-3">Add New Log</h2>
@@ -189,6 +212,10 @@ const Dashboard: React.FC<{ setCurrentView: (view: string, options?: { openAddFo
     const favoriteEV = evs[0];
     const units = getUnitsForCountry(favoriteEV.country);
 
+    const loanSummaries = evs.map(ev => getLoanSummary(ev, logs));
+    const anyLoan = loanSummaries.some(l => l.hasLoan);
+    const totalOutstanding = loanSummaries.reduce((acc, l) => acc + l.outstanding, 0);
+
     return (
         <div className="p-4 md:p-8">
             <h1 className="text-3xl font-bold text-white mb-6">Dashboard</h1>
@@ -196,6 +223,12 @@ const Dashboard: React.FC<{ setCurrentView: (view: string, options?: { openAddFo
                 <div className="bg-gray-800 p-5 rounded-lg"><h3 className="text-gray-400">Total Distance Driven</h3><p className="text-3xl font-bold">{totalDistance.toLocaleString()} {units.distanceSymbol}</p></div>
                 <div className="bg-gray-800 p-5 rounded-lg"><h3 className="text-gray-400">Total Spent</h3><p className="text-3xl font-bold">{units.currencySymbol}{totalCost.toFixed(2)}</p></div>
                 <div className="bg-gray-800 p-5 rounded-lg"><h3 className="text-gray-400">Charging Sessions</h3><p className="text-3xl font-bold">{totalCharges}</p></div>
+                {anyLoan && (
+                    <div className="bg-gray-800 p-5 rounded-lg">
+                        <h3 className="text-gray-400">Outstanding Loan</h3>
+                        <p className={`text-3xl font-bold ${totalOutstanding > 0 ? 'text-yellow-400' : 'text-green-400'}`}>{units.currencySymbol}{totalOutstanding.toFixed(2)}</p>
+                    </div>
+                )}
             </div>
 
             <div className="bg-gray-800 rounded-lg p-6">

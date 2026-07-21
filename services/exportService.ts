@@ -1,5 +1,6 @@
 import 'xlsx'; // Import for side effects, which attaches XLSX to the window object
 import { AppState, Log, EV, LogType, TripLog, ChargingLog, ServiceLog, ChargerType } from '../types';
+import { getLoanSummary, getLoanStatusLabel } from './loanService';
 
 const getLogDateString = (log: Log): string => {
     if ('startTime' in log) return log.startTime;
@@ -7,6 +8,7 @@ const getLogDateString = (log: Log): string => {
     if ('faultDate' in log) return log.faultDate;
     if ('purchaseDate' in log) return log.purchaseDate;
     if ('logDate' in log) return log.logDate;
+    if ('paymentDate' in log) return log.paymentDate;
     return '';
 };
 
@@ -82,6 +84,14 @@ const formatLogsForExport = (logs: Log[]) => {
                     'Rating (1-5)': log.rating,
                     'Comments': log.comments,
                 };
+            case LogType.LoanEMI:
+                return {
+                    ...base,
+                    'Loan Event': log.eventType,
+                    'Amount': log.emiAmount,
+                    'EMI Number': log.emiNumber,
+                    'Transferred To': log.transferredTo,
+                };
             default:
                 return base;
         }
@@ -107,6 +117,8 @@ const createAnalyticsSummary = (state: AppState) => {
         return acc;
     }, {} as Record<ChargerType, number>);
 
+    const totalOutstanding = state.evs.reduce((acc, ev) => acc + getLoanSummary(ev, logs).outstanding, 0);
+
     return [
         { Metric: 'Total EVs Tracked', Value: state.evs.length },
         { Metric: 'Total Logbook Entries', Value: state.logs.length },
@@ -116,6 +128,7 @@ const createAnalyticsSummary = (state: AppState) => {
         { Metric: 'Level 1 Charges', Value: chargerTypeCounts[ChargerType.L1] || 0 },
         { Metric: 'Level 2 Charges', Value: chargerTypeCounts[ChargerType.L2] || 0 },
         { Metric: 'DC Fast Charges', Value: chargerTypeCounts[ChargerType.DCFC] || 0 },
+        { Metric: 'Total Outstanding Loan', Value: totalOutstanding.toFixed(2) },
     ];
 };
 
@@ -129,13 +142,20 @@ export const exportDataToExcel = (state: AppState) => {
     }
     
     // 1. EV Details Sheet
-    const evsWithSimpleMedia = state.evs.map(ev => ({
-        ...ev,
-        images: (ev.images || []).length,
-        videos: (ev.videos || []).map(v => v.url).join(', '),
-        reviews: (ev.reviews || []).map(r => `${r.title}: ${r.url}`).join(', '),
-        socials: (ev.socials || []).map(s => `${s.platform}: ${s.url}`).join(', '),
-    }));
+    const evsWithSimpleMedia = state.evs.map(ev => {
+        const loan = getLoanSummary(ev, state.logs);
+        return {
+            ...ev,
+            images: (ev.images || []).length,
+            videos: (ev.videos || []).map(v => v.url).join(', '),
+            reviews: (ev.reviews || []).map(r => `${r.title}: ${r.url}`).join(', '),
+            socials: (ev.socials || []).map(s => `${s.platform}: ${s.url}`).join(', '),
+            loanTotalPrincipal: loan.hasLoan ? loan.totalPrincipal : '',
+            loanTotalPaid: loan.hasLoan ? loan.totalPaid : '',
+            loanOutstanding: loan.hasLoan ? loan.outstanding : '',
+            loanStatus: loan.hasLoan ? getLoanStatusLabel(loan) : '',
+        };
+    });
     const evsSheet = XLSX.utils.json_to_sheet(evsWithSimpleMedia);
 
     // 2. Logbook Sheet
